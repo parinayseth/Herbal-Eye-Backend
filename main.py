@@ -15,9 +15,20 @@ import tempfile
 import os
 
 
+origins = [ "*"
+]
+
 
 app = FastAPI(
     title="DrQA backend API", docs_url="/docs"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -137,24 +148,28 @@ def predict_single_image(model, img_path):
 
 @app.post("/predict")
 async def predict_image(image: UploadFile):
-    # Create temporary directory for uploaded image
-    with tempfile.TemporaryDirectory() as temp_dir:
-        # Save uploaded image to temporary file
-        img_path = f"{temp_dir}/temp.jpg"
-        with open(img_path, "wb") as f:
-            f.write(await image.read())
+    try:
+        # Create temporary directory for uploaded image
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Save uploaded image to temporary file
+            img_path = f"{temp_dir}/temp.jpg"
+            with open(img_path, "wb") as f:
+                f.write(await image.read())
 
-        # Predict class and confidence for the saved image
-        predicted_class, confidence, cure = predict_single_image(model, img_path)
+            # Predict class and confidence for the saved image
+            predicted_class, confidence, cure = predict_single_image(model, img_path)
+            
+            result = {"predicted_class": predicted_class, "confidence": confidence, "plant_cure": cure}
 
-        # Delete temporary image and directory
-        os.remove(img_path)
+            return result
+    except Exception as e:
+        # Handle exceptions (e.g., file reading, model prediction)
+        return {"error": f"An error occurred: {str(e)}"}
+    finally:
+        # Clean up: Delete temporary image and directory
+        if os.path.exists(img_path):
+            os.remove(img_path)
 
-        return {
-            "predicted_class": predicted_class,
-            "confidence": confidence,
-            "plant_cure": cure
-        }
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", reload=True, port=8000)
